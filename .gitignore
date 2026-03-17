@@ -1,0 +1,253 @@
+# Wildlife Conservation Tracker - .gitignore
+# Place this file in your project root directory
+
+# ============================================================================
+# PYTHON / BACKEND
+# ============================================================================
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv/
+backend/venv/
+backend/env/
+
+# Python compiled files
+*.pyc
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Flask
+instance/
+.webassets-cache
+
+# ============================================================================
+# MACHINE LEARNING MODELS
+# ============================================================================
+
+# Trained ML models (can be large, regenerate from training script)
+*.pkl
+*.joblib
+ml_model.pkl
+encoders.pkl
+
+# If you want to KEEP models in git (for deployment), comment out above and use:
+# !ml_model.pkl
+# !encoders.pkl
+
+# ============================================================================
+# NODE / REACT FRONTEND
+# ============================================================================
+
+# Dependencies
+node_modules/
+frontend/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# Production build
+frontend/build/
+frontend/dist/
+
+# Testing
+coverage/
+.nyc_output
+
+# ============================================================================
+# DATABASE
+# ============================================================================
+
+# SQLite databases (if you use SQLite for testing)
+*.db
+*.sqlite
+*.sqlite3
+
+# PostgreSQL dumps
+*.sql
+*.dump
+
+# Database backups
+backups/
+*.backup
+
+# ============================================================================
+# ENVIRONMENT VARIABLES & SECRETS
+# ============================================================================
+
+# Environment files with API keys/secrets
+.env
+.env.local
+.env.development
+.env.production
+.env.test
+
+# API keys and credentials
+*_credentials.json
+secrets.py
+config.py
+
+# IUCN API token (if you save it in a file)
+iucn_token.txt
+api_token.txt
+
+# ============================================================================
+# IDE / EDITOR
+# ============================================================================
+
+# VSCode
+.vscode/
+.history/
+
+# PyCharm
+.idea/
+*.iml
+*.iws
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+.\#*
+
+# JupyterNotebook
+.ipynb_checkpoints
+
+# ============================================================================
+# OPERATING SYSTEM
+# ============================================================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.directory
+.Trash-*
+
+# ============================================================================
+# LOGS & TEMPORARY FILES
+# ============================================================================
+
+# Logs
+*.log
+logs/
+*.out
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+*.swp
+
+# ============================================================================
+# AWS / DEPLOYMENT
+# ============================================================================
+
+# Elastic Beanstalk
+.elasticbeanstalk/
+!.elasticbeanstalk/*.cfg.yml
+!.elasticbeanstalk/*.global.yml
+
+# AWS credentials
+.aws/
+
+# ============================================================================
+# DATA FILES (OPTIONAL - UNCOMMENT IF NEEDED)
+# ============================================================================
+
+# Large data files (uncomment if you have big datasets)
+# *.csv
+# *.json
+# data/
+# datasets/
+
+# ============================================================================
+# TESTING
+# ============================================================================
+
+# pytest
+.pytest_cache/
+.tox/
+htmlcov/
+
+# Jest (React testing)
+frontend/coverage/
+
+# ============================================================================
+# DOCUMENTATION
+# ============================================================================
+
+# Generated documentation
+docs/_build/
+site/
+
+# ============================================================================
+# MISC
+# ============================================================================
+
+# Cache
+.cache/
+*.cache
+
+# Compiled source
+*.com
+*.class
+*.dll
+*.exe
+*.o
+*.so
+
+# Archives
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
