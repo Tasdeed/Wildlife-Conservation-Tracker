@@ -6,17 +6,23 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
+from dotenv import load_dotenv
 import os
 import joblib
 import numpy as np
+
+# Load environment variables from .env
+load_dotenv()
 
 # Create Flask app
 app = Flask(__name__)
 CORS(app)
 
 # Configuration
-app.config['SECRET_KEY'] = 'dev-secret-key-change-later'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://localhost/wildlife_tracker'
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-later')
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
+    'DATABASE_URL', 'postgresql://localhost/wildlife_tracker'
+)
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Initialize database

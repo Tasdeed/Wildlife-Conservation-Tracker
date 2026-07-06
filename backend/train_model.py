@@ -70,7 +70,7 @@ def prepare_features(df):
     print(f"Unlabeled samples: {len(unlabeled_df)}")
     
     if len(labeled_df) < 10:
-        print("\n❌ ERROR: Not enough labeled data to train model!")
+        print("\n ERROR: Not enough labeled data to train model!")
         print("Need at least 10 labeled species.")
         return None, None, None, None
     
@@ -232,7 +232,7 @@ def predict_unknown_trends(model, X_unlabeled, unlabeled_df):
             print(f"✓ Updated {updated_count} species in database")
         except Exception as e:
             db.session.rollback()
-            print(f"❌ Error updating database: {e}")
+            print(f"Error updating database: {e}")
 
 def save_model_and_encoders(model):
     """Save trained model and encoders"""

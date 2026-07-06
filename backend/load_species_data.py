@@ -3,13 +3,16 @@ Load Species Data from IUCN Red List API v4
 WORKING VERSION - Correctly parses v4 API responses
 """
 
+import os
 import requests
 import time
+from dotenv import load_dotenv
 from app import app, db, Species
 from sqlalchemy.exc import IntegrityError
 
-# REPLACE WITH YOUR ACTUAL V4 TOKEN
-IUCN_API_TOKEN = 'hfhE16kGi1sJysee2BpSqT4erTDN2y3JeFw5'
+load_dotenv()
+
+IUCN_API_TOKEN = os.environ.get('IUCN_API_TOKEN', 'YOUR_V4_TOKEN_HERE')
 
 BASE_URL = 'https://api.iucnredlist.org/api/v4'
 

@@ -3,12 +3,15 @@ Update Population Trends for Existing Species
 Uses the population_trends endpoint to get actual trends
 """
 
+import os
 import requests
 import time
+from dotenv import load_dotenv
 from app import app, db, Species
 
-# REPLACE WITH YOUR ACTUAL V4 TOKEN
-IUCN_API_TOKEN = 'hfhE16kGi1sJysee2BpSqT4erTDN2y3JeFw5'
+load_dotenv()
+
+IUCN_API_TOKEN = os.environ.get('IUCN_API_TOKEN', 'YOUR_V4_TOKEN_HERE')
 
 BASE_URL = 'https://api.iucnredlist.org/api/v4'
 
