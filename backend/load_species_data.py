@@ -1,11 +1,14 @@
 """
 Load Species Data from IUCN Red List API v4
-WORKING VERSION - Correctly parses v4 API responses
+
+Fetches species across conservation categories, pulling taxonomy AND population
+trend from each assessment detail in a single pass. Paginates category listings,
+retries on rate-limiting, and skips species already in the DB (resumable).
 """
 
 import os
-import requests
 import time
+import requests
 from dotenv import load_dotenv
 from app import app, db, Species
 from sqlalchemy.exc import IntegrityError
@@ -13,245 +16,192 @@ from sqlalchemy.exc import IntegrityError
 load_dotenv()
 
 IUCN_API_TOKEN = os.environ.get('IUCN_API_TOKEN', 'YOUR_V4_TOKEN_HERE')
-
 BASE_URL = 'https://api.iucnredlist.org/api/v4'
 
-# Population trend code mapping
-POPULATION_TRENDS = {
-    '0': 'Increasing',
-    '1': 'Decreasing',
-    '2': 'Stable',
-    '3': 'Unknown'
-}
+# Categories to load and how many latest assessments to target for each.
+# LC/NT are included so the trend labels aren't all "Decreasing" (threatened
+# categories skew heavily to declining populations).
+CATEGORIES = [
+    ('CR', 'Critically Endangered', 190),
+    ('EN', 'Endangered', 190),
+    ('VU', 'Vulnerable', 190),
+    ('NT', 'Near Threatened', 190),
+    ('LC', 'Least Concern', 190),
+]
+
+MAX_PAGES = 20  # safety cap on pagination per category
+
 
 def get_headers():
-    """Return auth headers"""
     return {'Authorization': f'Bearer {IUCN_API_TOKEN}'}
 
-def fetch_species_by_category(category, max_results=200):
-    """Fetch species from a Red List category (CR, EN, VU)"""
-    print(f"\nFetching {category} species...")
-    
-    url = f"{BASE_URL}/red_list_categories/{category}"
-    
-    try:
-        response = requests.get(url, headers=get_headers(), timeout=30)
-        
-        if response.status_code == 200:
-            data = response.json()
-            
-            # Data is in 'assessments' key
-            assessments = data.get('assessments', [])
-            
-            # Filter for latest assessments only
-            latest_assessments = [a for a in assessments if a.get('latest') == True]
-            
-            # Limit results
-            latest_assessments = latest_assessments[:max_results]
-            
-            print(f"  ✓ Total assessments: {len(assessments)}")
-            print(f"  ✓ Latest assessments: {len(latest_assessments)}")
-            
-            return latest_assessments
-        else:
-            print(f"  ❌ Error {response.status_code}: {response.text[:200]}")
-            return []
-    except Exception as e:
-        print(f"  ❌ Exception: {e}")
-        return []
 
-def get_assessment_details(assessment_id):
-    """Get detailed assessment data including population trend"""
-    url = f"{BASE_URL}/assessment/{assessment_id}"
-    
-    try:
-        response = requests.get(url, headers=get_headers(), timeout=10)
-        if response.status_code == 200:
-            return response.json()
-    except Exception as e:
-        pass
-    
+def get_with_retry(url, max_retries=5):
+    """GET with backoff on rate-limit (429) / transient 5xx. Returns Response or None."""
+    delay = 2.0
+    for _ in range(max_retries):
+        try:
+            resp = requests.get(url, headers=get_headers(), timeout=20)
+        except Exception as e:
+            print(f"    request error ({e}); retrying in {delay:.0f}s")
+            time.sleep(delay)
+            delay *= 2
+            continue
+
+        if resp.status_code == 200:
+            return resp
+        if resp.status_code == 429 or resp.status_code >= 500:
+            wait = float(resp.headers.get('Retry-After', delay))
+            print(f"    HTTP {resp.status_code} (rate limit); waiting {wait:.0f}s")
+            time.sleep(wait)
+            delay *= 2
+            continue
+        print(f"    HTTP {resp.status_code} — giving up on {url}")
+        return None
+
+    print(f"    exhausted retries for {url}")
     return None
 
-def save_species_to_db(assessment_data, details=None):
-    """Save species to database"""
+
+def fetch_category_assessments(category, target):
+    """Paginate a category listing, collecting up to `target` latest assessments."""
+    print(f"\nFetching {category} (target {target})...")
+    collected = []
+    page = 1
+    while len(collected) < target and page <= MAX_PAGES:
+        resp = get_with_retry(f"{BASE_URL}/red_list_categories/{category}?page={page}")
+        if resp is None:
+            break
+        assessments = resp.json().get('assessments', [])
+        if not assessments:
+            break  # ran out of pages
+        latest = [a for a in assessments if a.get('latest')]
+        collected.extend(latest)
+        print(f"  page {page}: +{len(latest)} latest (total {len(collected)})")
+        page += 1
+        time.sleep(0.3)
+
+    return collected[:target]
+
+
+def get_assessment_details(assessment_id):
+    resp = get_with_retry(f"{BASE_URL}/assessment/{assessment_id}")
+    return resp.json() if resp else None
+
+
+def extract_trend(details):
+    """Population trend from the assessment's top-level population_trend field."""
+    pt = details.get('population_trend')
+    if isinstance(pt, dict):
+        name = (pt.get('description') or {}).get('en')
+        if name:
+            return name
+    return 'Unknown'
+
+
+def save_species(assessment, details):
+    """Insert one species from its assessment summary + detail. Returns Species or None."""
+    scientific_name = assessment.get('taxon_scientific_name')
+    if not scientific_name:
+        return None
+
+    if Species.query.filter_by(scientific_name=scientific_name).first():
+        return None  # already loaded
+
+    taxon = (details or {}).get('taxon', {})
+    common_name = None
+    for cn in taxon.get('common_names', []) or []:
+        if cn.get('language') == 'eng':
+            common_name = cn.get('name')
+            if cn.get('main'):
+                break
+
+    species = Species(
+        taxon_id=assessment.get('sis_taxon_id'),
+        scientific_name=scientific_name,
+        common_name=common_name,
+        kingdom=taxon.get('kingdom_name'),
+        phylum=taxon.get('phylum_name'),
+        class_name=taxon.get('class_name'),
+        order=taxon.get('order_name'),
+        family=taxon.get('family_name'),
+        category=assessment.get('red_list_category_code'),
+        population_trend=extract_trend(details or {}),
+    )
+
     try:
-        # Get scientific name from assessment
-        scientific_name = assessment_data.get('taxon_scientific_name')
-        
-        if not scientific_name:
-            return None
-        
-        # Check if exists
-        existing = Species.query.filter_by(scientific_name=scientific_name).first()
-        if existing:
-            return existing
-        
-        # Get population trend from details if available
-        population_trend = 'Unknown'
-        if details and 'assessment' in details:
-            assessment_info = details['assessment']
-            trend_code = assessment_info.get('population_trend_code')
-            if trend_code:
-                population_trend = POPULATION_TRENDS.get(str(trend_code), 'Unknown')
-        
-        # Get taxonomy from details or use None
-        if details and 'taxon' in details:
-            taxon = details['taxon']
-            kingdom = taxon.get('kingdom_name')
-            phylum = taxon.get('phylum_name')
-            class_name = taxon.get('class_name')
-            order = taxon.get('order_name')
-            family = taxon.get('family_name')
-            
-            # Get common name
-            common_names = taxon.get('common_names', [])
-            common_name = None
-            if common_names:
-                # Try to find main common name
-                for cn in common_names:
-                    if cn.get('main') == True and cn.get('language') == 'eng':
-                        common_name = cn.get('name')
-                        break
-                # If no main, just use first English one
-                if not common_name:
-                    for cn in common_names:
-                        if cn.get('language') == 'eng':
-                            common_name = cn.get('name')
-                            break
-        else:
-            kingdom = phylum = class_name = order = family = common_name = None
-        
-        # Create species
-        species = Species(
-            taxon_id=assessment_data.get('sis_taxon_id'),
-            scientific_name=scientific_name,
-            common_name=common_name,
-            kingdom=kingdom,
-            phylum=phylum,
-            class_name=class_name,
-            order=order,
-            family=family,
-            category=assessment_data.get('red_list_category_code'),
-            population_trend=population_trend
-        )
-        
         db.session.add(species)
         db.session.commit()
-        
         return species
-    
     except IntegrityError:
         db.session.rollback()
         return None
     except Exception as e:
         db.session.rollback()
-        print(f"    Error saving: {e}")
+        print(f"    save error: {e}")
         return None
 
+
 def load_species_data():
-    """Main function to load species data"""
-    
     print("=" * 60)
     print("WILDLIFE CONSERVATION TRACKER - IUCN v4 DATA LOADER")
     print("=" * 60)
-    
+
     if IUCN_API_TOKEN == 'YOUR_V4_TOKEN_HERE':
-        print("\n❌ ERROR: Please set your IUCN API token!")
+        print("\nERROR: Set IUCN_API_TOKEN in .env first.")
         return
-    
-    # Test connection
-    print("\nTesting API connection...")
-    url = f"{BASE_URL}/information/api_version"
-    response = requests.get(url, headers=get_headers(), timeout=10)
-    
-    if response.status_code != 200:
-        print(f"❌ API connection failed: {response.status_code}")
-        return
-    
-    print(f"✓ Connected to IUCN API {response.json().get('api_version')}")
-    
+
     with app.app_context():
-        categories = [
-            ('CR', 'Critically Endangered', 200),
-            ('EN', 'Endangered', 200),
-            ('VU', 'Vulnerable', 200)
-        ]
-        
-        total_species = 0
-        
-        for category, name, max_results in categories:
-            print(f"\n{'=' * 60}")
-            print(f"Loading {name} ({category}) species")
-            print('=' * 60)
-            
-            # Fetch species list
-            assessments = fetch_species_by_category(category, max_results)
-            
-            # Save each species
+        total_new = 0
+
+        for category, name, target in CATEGORIES:
+            print(f"\n{'=' * 60}\nLoading {name} ({category})\n{'=' * 60}")
+            assessments = fetch_category_assessments(category, target)
+
             for i, assessment in enumerate(assessments, 1):
-                scientific_name = assessment.get('taxon_scientific_name', 'Unknown')
-                assessment_id = assessment.get('assessment_id')
-                
-                print(f"\n[{i}/{len(assessments)}] {scientific_name}")
-                
-                # Get detailed assessment (for first 100 to save time)
-                details = None
-                if i <= 100:
-                    print(f"  Fetching details...")
-                    details = get_assessment_details(assessment_id)
-                    time.sleep(0.3)
-                
-                # Save to database
-                species_obj = save_species_to_db(assessment, details)
-                
-                if species_obj:
-                    total_species += 1
-                    trend = species_obj.population_trend or 'Unknown'
-                    print(f"  ✓ Saved (ID: {species_obj.id}, Trend: {trend})")
-                else:
-                    print(f"  ⚠ Skipped (duplicate)")
-                
-                # Progress update
-                if i % 25 == 0:
-                    print(f"\n--- Progress: {i}/{len(assessments)} ---")
-                    print(f"--- Total saved: {total_species} ---")
-                
-                time.sleep(0.4)  # Rate limiting
-        
-        # Final summary
+                sci = assessment.get('taxon_scientific_name', 'Unknown')
+
+                # Skip existing before spending a detail call (resumable re-runs).
+                if Species.query.filter_by(scientific_name=sci).first():
+                    continue
+
+                details = get_assessment_details(assessment.get('assessment_id'))
+                time.sleep(0.3)
+
+                species = save_species(assessment, details)
+                if species:
+                    total_new += 1
+                    if total_new % 25 == 0:
+                        print(f"  ...{total_new} new species saved so far")
+
+            print(f"  {category} done")
+
+        # Summary
         print("\n" + "=" * 60)
-        print("DATA LOADING COMPLETE!")
+        print("DATA LOADING COMPLETE")
         print("=" * 60)
-        print(f"Total species saved: {total_species}")
+        print(f"New species this run: {total_new}")
         print(f"Database total: {Species.query.count()}")
-        
-        # Population trend breakdown
-        print("\nPopulation Trend Breakdown:")
+
+        print("\nTrend breakdown:")
         for trend in ['Increasing', 'Stable', 'Decreasing', 'Unknown']:
-            count = Species.query.filter_by(population_trend=trend).count()
-            print(f"  {trend}: {count}")
-        
-        # Category breakdown
-        print("\nCategory Breakdown:")
-        for cat in ['CR', 'EN', 'VU']:
-            count = Species.query.filter_by(category=cat).count()
-            print(f"  {cat}: {count}")
-        
+            print(f"  {trend}: {Species.query.filter_by(population_trend=trend).count()}")
+
+        print("\nCategory breakdown:")
+        for cat, _, _ in CATEGORIES:
+            print(f"  {cat}: {Species.query.filter_by(category=cat).count()}")
         print("=" * 60)
 
+
 if __name__ == '__main__':
-    print("\nStarting IUCN v4 data load...")
-    print("This will take 30-50 minutes.")
-    print("Press Ctrl+C to cancel.\n")
-    
+    print("\nStarting IUCN v4 data load (this takes a while)...\n")
     try:
         load_species_data()
     except KeyboardInterrupt:
-        print("\n\nInterrupted.")
+        print("\nInterrupted.")
         with app.app_context():
-            print(f"Saved: {Species.query.count()} species")
+            print(f"Saved so far: {Species.query.count()} species")
     except Exception as e:
-        print(f"\n\nError: {e}")
+        print(f"\nError: {e}")
         import traceback
         traceback.print_exc()
