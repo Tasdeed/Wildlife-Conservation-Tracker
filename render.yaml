@@ -1,0 +1,18 @@
+# Render blueprint for the Flask backend.
+# Database is hosted on Neon (persistent free tier), so DATABASE_URL is set
+# manually in the Render dashboard rather than provisioned here.
+services:
+  - type: web
+    name: wildlife-tracker-api
+    runtime: python
+    rootDir: backend
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: DATABASE_URL
+        sync: false # paste your Neon connection string in the dashboard
+      - key: SECRET_KEY
+        generateValue: true
+      - key: IUCN_API_TOKEN
+        sync: false # only needed if running loaders on the server
