@@ -20,9 +20,14 @@ CORS(app)
 
 # Configuration
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-later')
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
-    'DATABASE_URL', 'postgresql://localhost/wildlife_tracker'
-)
+
+# Neon/Render sometimes provide a legacy "postgres://" scheme that SQLAlchemy
+# rejects; normalize it to the "postgresql://" driver name it expects.
+database_url = os.environ.get('DATABASE_URL', 'postgresql://localhost/wildlife_tracker')
+if database_url.startswith('postgres://'):
+    database_url = database_url.replace('postgres://', 'postgresql://', 1)
+
+app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Initialize database
@@ -91,9 +96,22 @@ class SpeciesLocation(db.Model):
     latitude = db.Column(db.Float, nullable=False)
     longitude = db.Column(db.Float, nullable=False)
     country = db.Column(db.String(100))
-    
+
     # Relationship
     species = db.relationship('Species', backref='locations')
+
+    def to_dict(self):
+        """Flatten location + parent species fields for the map endpoint"""
+        return {
+            'species_id': self.species_id,
+            'scientific_name': self.species.scientific_name if self.species else None,
+            'common_name': self.species.common_name if self.species else None,
+            'category': self.species.category if self.species else None,
+            'trend': self.species.population_trend if self.species else None,
+            'lat': self.latitude,
+            'lng': self.longitude,
+            'country': self.country
+        }
 
 # ============================================================================
 # BASIC API ENDPOINTS
@@ -149,11 +167,32 @@ def get_all_species():
 def get_species(species_id):
     """Get a single species by ID"""
     species = Species.query.get(species_id)
-    
+
     if not species:
         return jsonify({'error': 'Species not found'}), 404
-    
+
     return jsonify(species.to_dict())
+
+@app.route('/api/locations', methods=['GET'])
+def get_locations():
+    """Get species locations for the map, with optional category/trend filters"""
+    category = request.args.get('category')
+    trend = request.args.get('trend')
+
+    # Join so we can filter on the parent species' attributes in one query.
+    query = SpeciesLocation.query.join(Species)
+
+    if category:
+        query = query.filter(Species.category == category)
+    if trend:
+        query = query.filter(Species.population_trend == trend)
+
+    locations = query.all()
+
+    return jsonify({
+        'count': len(locations),
+        'locations': [loc.to_dict() for loc in locations]
+    })
 
 # ============================================================================
 # ML PREDICTION ENDPOINTS
@@ -237,7 +276,7 @@ def model_stats():
     
     # Count by category
     categories = {}
-    for cat in ['CR', 'EN', 'VU']:
+    for cat in ['CR', 'EN', 'VU', 'NT', 'LC']:
         count = Species.query.filter_by(category=cat).count()
         categories[cat] = count
     

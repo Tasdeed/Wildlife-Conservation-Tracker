@@ -108,6 +108,10 @@ backups/
 .env.production
 .env.test
 
+# Exception: frontend production env holds only the public backend URL (no
+# secrets) and must be committed so the GitHub Pages build can read it.
+!frontend/.env.production
+
 # API keys and credentials
 *_credentials.json
 secrets.py
