@@ -10,6 +10,11 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app
     envVars:
+      # numpy/pandas/scikit-learn are pinned to versions with no cp313
+      # wheels; without this Render's default (3.13) builds them from source
+      # and the free-tier build fails. Matches the local venv.
+      - key: PYTHON_VERSION
+        value: 3.12.7
       - key: DATABASE_URL
         sync: false # paste your Neon connection string in the dashboard
       - key: SECRET_KEY

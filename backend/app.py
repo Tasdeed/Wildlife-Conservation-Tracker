@@ -5,6 +5,7 @@ Wildlife Conservation Tracker - Backend API with Database and ML Predictions
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.orm import contains_eager
 from datetime import datetime
 from dotenv import load_dotenv
 import os
@@ -179,8 +180,12 @@ def get_locations():
     category = request.args.get('category')
     trend = request.args.get('trend')
 
-    # Join so we can filter on the parent species' attributes in one query.
-    query = SpeciesLocation.query.join(Species)
+    # Join to filter on the parent's attributes, and contains_eager to load it
+    # in the same query: to_dict() reads species fields, so a plain join still
+    # lazy-loads each distinct species (~940 extra round trips to Neon).
+    query = SpeciesLocation.query.join(SpeciesLocation.species).options(
+        contains_eager(SpeciesLocation.species)
+    )
 
     if category:
         query = query.filter(Species.category == category)
