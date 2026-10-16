@@ -55,9 +55,10 @@ instance/
 ml_model.pkl
 encoders.pkl
 
-# If you want to KEEP models in git (for deployment), comment out above and use:
-# !ml_model.pkl
-# !encoders.pkl
+# Kept in git on purpose: Render deploys from the repo, and app.py returns 500
+# from /api/model/stats (the dashboard's only call) when these are absent.
+!ml_model.pkl
+!encoders.pkl
 
 # ============================================================================
 # NODE / REACT FRONTEND
@@ -128,6 +129,7 @@ api_token.txt
 # VSCode
 .vscode/
 .history/
+.claude
 
 # PyCharm
 .idea/
@@ -255,3 +257,4 @@ site/
 *.rar
 *.tar
 *.zip
+.neon
