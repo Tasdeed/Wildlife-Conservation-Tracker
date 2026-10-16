@@ -12,7 +12,14 @@ import os
 import joblib
 import numpy as np
 
-# Load environment variables from .env
+# Neon writes DATABASE_URL / DATABASE_URL_UNPOOLED / NEON_BRANCH into the
+# repo-root .env.local (`neon env pull`, `neon deploy`, `neon checkout`). Load
+# that first with override so the linked Neon branch is the source of truth for
+# the database, then backend/.env supplies the rest (IUCN token, secret key)
+# without clobbering it. On Render neither file is present and DATABASE_URL
+# comes from the dashboard, which load_dotenv leaves alone.
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+load_dotenv(os.path.join(_REPO_ROOT, '.env.local'), override=True)
 load_dotenv()
 
 # Create Flask app
@@ -30,6 +37,12 @@ if database_url.startswith('postgres://'):
 
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# Neon scale-to-zero suspends the compute after 5 minutes idle and cannot be
+# disabled on the free plan, so pooled connections go stale between requests.
+# pool_pre_ping validates a connection before handing it out, turning what
+# would be "server closed the connection unexpectedly" into a silent reconnect.
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {'pool_pre_ping': True}
 
 # Initialize database
 db = SQLAlchemy(app)
