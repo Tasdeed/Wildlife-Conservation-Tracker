@@ -27,13 +27,33 @@ app = Flask(__name__)
 CORS(app)
 
 # Configuration
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-later')
+# Required, with no fallback on purpose. A default committed to the repo is a
+# publicly known signing key, so if sessions or CSRF are ever added, a missing
+# env var would silently sign cookies with a string anyone can read. Failing at
+# startup is the loud version of that mistake.
+SECRET_KEY = os.environ.get('SECRET_KEY')
+if not SECRET_KEY:
+    raise RuntimeError(
+        "SECRET_KEY is not set. Add it to backend/.env for local work, or to "
+        "the service's environment variables in production."
+    )
+app.config['SECRET_KEY'] = SECRET_KEY
 
 # Neon/Render sometimes provide a legacy "postgres://" scheme that SQLAlchemy
 # rejects; normalize it to the "postgresql://" driver name it expects.
 database_url = os.environ.get('DATABASE_URL', 'postgresql://localhost/wildlife_tracker')
 if database_url.startswith('postgres://'):
     database_url = database_url.replace('postgres://', 'postgresql://', 1)
+
+# Neon's console also hands out a SQLAlchemy-flavoured string naming psycopg v3
+# ("postgresql+psycopg://"), but requirements.txt pins psycopg2-binary, so
+# SQLAlchemy obeys the scheme and fails on `import psycopg`. Point it at the
+# driver that is actually installed. The trailing "://" matters: without it
+# this would also rewrite an explicit psycopg2 URL into "psycopg22".
+if database_url.startswith('postgresql+psycopg://'):
+    database_url = database_url.replace(
+        'postgresql+psycopg://', 'postgresql+psycopg2://', 1
+    )
 
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
