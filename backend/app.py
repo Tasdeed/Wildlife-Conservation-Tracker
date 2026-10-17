@@ -6,6 +6,7 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import contains_eager
+from sqlalchemy.engine import make_url
 from datetime import datetime
 from dotenv import load_dotenv
 import os
@@ -39,23 +40,30 @@ if not SECRET_KEY:
     )
 app.config['SECRET_KEY'] = SECRET_KEY
 
-# Neon/Render sometimes provide a legacy "postgres://" scheme that SQLAlchemy
-# rejects; normalize it to the "postgresql://" driver name it expects.
-database_url = os.environ.get('DATABASE_URL', 'postgresql://localhost/wildlife_tracker')
-if database_url.startswith('postgres://'):
-    database_url = database_url.replace('postgres://', 'postgresql://', 1)
+# DATABASE_URL arrives in whatever flavour the provider hands out: the legacy
+# "postgres://", Neon's SQLAlchemy snippet naming psycopg v3
+# ("postgresql+psycopg://"), an async driver, or any of those with stray
+# whitespace from a copy-paste. Prefix matching missed cases and cost several
+# failed deploys, so parse the URL and pin the driver to the one that
+# requirements.txt actually installs. Everything else -- host, database, and
+# query params like sslmode and channel_binding -- is preserved.
+_raw_database_url = os.environ.get(
+    'DATABASE_URL', 'postgresql://localhost/wildlife_tracker'
+).strip()
+try:
+    _db_url = make_url(_raw_database_url)
+except Exception as exc:
+    raise RuntimeError(f"DATABASE_URL is not a valid connection URL: {exc}") from exc
 
-# Neon's console also hands out a SQLAlchemy-flavoured string naming psycopg v3
-# ("postgresql+psycopg://"), but requirements.txt pins psycopg2-binary, so
-# SQLAlchemy obeys the scheme and fails on `import psycopg`. Point it at the
-# driver that is actually installed. The trailing "://" matters: without it
-# this would also rewrite an explicit psycopg2 URL into "psycopg22".
-if database_url.startswith('postgresql+psycopg://'):
-    database_url = database_url.replace(
-        'postgresql+psycopg://', 'postgresql+psycopg2://', 1
-    )
+if _db_url.drivername.startswith('postgres'):
+    _db_url = _db_url.set(drivername='postgresql+psycopg2')
 
-app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+app.config['SQLALCHEMY_DATABASE_URI'] = _db_url.render_as_string(hide_password=False)
+
+# Report what we resolved, without the password. Discovering a bad scheme from
+# a ModuleNotFoundError three frames deep in SQLAlchemy is a poor substitute.
+print(f"→ database: {_db_url.drivername} @ {_db_url.host}/{_db_url.database}")
+
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Neon scale-to-zero suspends the compute after 5 minutes idle and cannot be
