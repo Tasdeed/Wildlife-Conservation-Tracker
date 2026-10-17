@@ -22,3 +22,26 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# --- project additions beyond the Vite defaults above ---
+
+# Build output (Vite's "dist" above covers the default; "build" is here in case
+# the output dir is ever changed)
+build/
+
+# Testing
+coverage/
+.nyc_output
+
+# Env files. Vite's "*.local" above already covers .env.local. This one is
+# committed on purpose: it holds only the public Render API URL, no secret, and
+# the Pages build reads it at build time to bake VITE_API_BASE_URL into the
+# bundle. Without it the deployed site has no API to call.
+.env
+.env.development
+.env.test
+.env.production
+!.env.production
+
+# package-lock.json is intentionally NOT ignored: `npm ci` in the Pages
+# workflow requires it, and actions/setup-node caches against it.

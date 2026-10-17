@@ -1,0 +1,56 @@
+# Python / Flask backend. Scoped here on purpose: these patterns used to live
+# in the root .gitignore, where unanchored entries like "lib/" reached into
+# frontend/src/lib/ and silently kept source out of the repo.
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# Byte-compiled
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging (setuptools output, beside this directory)
+/build/
+/develop-eggs/
+/dist/
+/downloads/
+/eggs/
+/.eggs/
+/lib/
+/lib64/
+/parts/
+/sdist/
+/var/
+/wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Flask
+instance/
+.webassets-cache
+
+# Testing
+.pytest_cache/
+.tox/
+htmlcov/
+.coverage
+
+# Trained model artifacts are large and regenerable, but these two are
+# committed deliberately: Render deploys from the repo, and app.py returns 500
+# from /api/model/stats -- the dashboard's only call -- when they are absent.
+*.pkl
+*.joblib
+!ml_model.pkl
+!encoders.pkl
+
+# Local databases and dumps
+*.db
+*.sqlite
+*.sqlite3
+*.sql
+*.dump
