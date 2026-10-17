@@ -70,7 +70,8 @@ frontend/node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-package-lock.json
+# Lockfiles are committed on purpose: `npm ci` in the Pages workflow
+# requires one, and actions/setup-node caches against it.
 yarn.lock
 
 # Production build
