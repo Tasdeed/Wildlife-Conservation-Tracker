@@ -37,9 +37,18 @@ export default function SpeciesMap({ locations }: { locations: SpeciesLocation[]
   const isDark = useIsDark()
   const groups = groupByPoint(locations)
 
-  const tileUrl = isDark
-    ? 'https://cartodb-basemaps-a.global.ssl.fastly.net/dark_all/{z}/{x}/{y}.png'
-    : 'https://cartodb-basemaps-a.global.ssl.fastly.net/light_all/{z}/{x}/{y}.png'
+  // CARTO requires BOTH the basemaps.cartocdn.com host and a key parameter.
+  // The legacy cartodb-basemaps-*.global.ssl.fastly.net host 403s outright when
+  // a key is supplied ("requests must use a basemaps.cartocdn.com host"), so the
+  // host has to change alongside the key -- adding the key alone blanks the map.
+  // Unkeyed requests still succeed but return a watermarked, low-detail tile
+  // (2KB vs 8KB), so we fall back to that when no key is configured: a
+  // watermarked map beats no map.
+  const style = isDark ? 'dark_all' : 'light_all'
+  const cartoKey = import.meta.env.VITE_CARTO_API_KEY
+  const tileUrl = cartoKey
+    ? `https://basemaps.cartocdn.com/${style}/{z}/{x}/{y}.png?key=${cartoKey}`
+    : `https://basemaps.cartocdn.com/${style}/{z}/{x}/{y}.png`
 
   return (
     <MapContainer
