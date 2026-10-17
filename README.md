@@ -151,8 +151,11 @@ so the Pages subpath works without server-side routing.
 ## Notes
 
 - **Secrets**: `backend/.env` and the root `.env.local` are git-ignored.
-  `frontend/.env.production` is committed on purpose — it holds only the public
-  API URL, which the Pages build bakes into the bundle.
+  `frontend/.env.production` is committed on purpose — it holds the public API
+  URL and the CARTO basemap key, both of which the Pages build bakes into the
+  bundle. Those are client-side values the browser sends itself, so they are
+  public regardless; the control for the CARTO key is a domain restriction in
+  the CARTO dashboard, not secrecy. No server-side secret belongs in that file.
 - **`.gitignore` is split by directory**: `backend/`, `frontend/` and the root
   each own their rules. Don't merge language templates back into the root; see
   Known issues.

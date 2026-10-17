@@ -34,9 +34,11 @@ coverage/
 .nyc_output
 
 # Env files. Vite's "*.local" above already covers .env.local. This one is
-# committed on purpose: it holds only the public Render API URL, no secret, and
-# the Pages build reads it at build time to bake VITE_API_BASE_URL into the
-# bundle. Without it the deployed site has no API to call.
+# committed on purpose: the Pages build reads it to bake VITE_API_BASE_URL and
+# VITE_CARTO_API_KEY into the bundle, and without it the deployed site has no
+# API to call and an unkeyed (watermarked) basemap. Both values are
+# client-side by nature -- the browser sends them itself, so they are public
+# whether or not this file is committed. Never put a server-side secret here.
 .env
 .env.development
 .env.test
